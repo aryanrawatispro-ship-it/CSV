@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Upload, X, FileSpreadsheet, Loader2 } from "lucide-react";
+import { Upload, X, FileSpreadsheet, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { formatBytes } from "@/lib/utils";
 import { UploadResponse } from "@/lib/types";
 
@@ -14,21 +15,36 @@ interface FileUploadProps {
 export function FileUpload({ onUploadComplete }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string>("");
 
   const handleUpload = useCallback(
     async (file: File) => {
       setUploading(true);
       setError(null);
+      setFileName(file.name);
+      setUploadProgress(0);
 
       try {
         const formData = new FormData();
         formData.append("file", file);
 
+        // Simulate progress for better UX
+        const progressInterval = setInterval(() => {
+          setUploadProgress((prev) => {
+            if (prev >= 90) return prev;
+            return prev + 10;
+          });
+        }, 200);
+
         const response = await fetch("/api/upload", {
           method: "POST",
           body: formData,
         });
+
+        clearInterval(progressInterval);
+        setUploadProgress(100);
 
         if (!response.ok) {
           const error = await response.json();
@@ -36,11 +52,15 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         }
 
         const data: UploadResponse = await response.json();
+
+        // Small delay to show completion
+        await new Promise(resolve => setTimeout(resolve, 300));
         onUploadComplete(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed");
       } finally {
         setUploading(false);
+        setUploadProgress(0);
       }
     },
     [onUploadComplete]
@@ -72,10 +92,10 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
   return (
     <div className="space-y-4">
       <Card
-        className={`border-2 border-dashed transition-colors ${
+        className={`border-2 border-dashed transition-all duration-300 ${
           isDragging
-            ? "border-primary bg-primary/5"
-            : "border-muted-foreground/25"
+            ? "border-primary bg-primary/5 scale-105 shadow-lg"
+            : "border-muted-foreground/25 hover:border-muted-foreground/50"
         }`}
         onDragOver={(e) => {
           e.preventDefault();
@@ -87,10 +107,20 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         <div className="p-8 text-center space-y-4">
           {uploading ? (
             <>
-              <Loader2 className="h-12 w-12 mx-auto text-primary animate-spin" />
-              <p className="text-sm text-muted-foreground">
-                Uploading and processing...
-              </p>
+              <div className="flex items-center justify-center">
+                {uploadProgress === 100 ? (
+                  <CheckCircle2 className="h-12 w-12 text-green-500 animate-in zoom-in" />
+                ) : (
+                  <Loader2 className="h-12 w-12 text-primary animate-spin" />
+                )}
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{fileName}</p>
+                <Progress value={uploadProgress} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  {uploadProgress === 100 ? "Processing complete!" : `${uploadProgress}% uploaded`}
+                </p>
+              </div>
             </>
           ) : (
             <>
